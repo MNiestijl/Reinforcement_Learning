@@ -1,0 +1,9 @@
+Q Learning:
+	+ Efficient when it works
+	- No quaranteed convergence
+	- Exploration
+
+Policy Gradient:
+	+ Very general 
+	+ Converges to local minimaof J(theta)
+	- Requires lots of samples

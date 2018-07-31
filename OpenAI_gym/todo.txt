@@ -1,0 +1,12 @@
+Implement Deep Q learning
+implement 'experience replay'
+implement 'freezing target networks'
+
+Implement a basic policy gradient algorithm 
+Actor critic algorithm?
+
+Implement 'saddle-free Newton's method' to (greatly?) improve performance of high dimensional optimization (e.g. neural nets)
+
+Investigate 'Evolution Strategies' (ES)
+Investigate the relation between ES and deep neural networks. (deep neuroevolution)
+
