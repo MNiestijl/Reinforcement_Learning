@@ -1,7 +1,7 @@
 import gym
 from Policy import RandomPolicy
-from Agent import Agent
-from ValueFunctionApproximator import NaiveApproximator
+from MDP_based.MDPAgent import MDPAgent
+from MDP_based.ValueFunctionApproximator import NaiveApproximator
 import plot
 import matplotlib.pyplot as plt
 import numpy as np
@@ -72,24 +72,24 @@ def main():
 	5: 'Taxi-v2'			# Easy, discrete state space
 	}
 	max_timesteps = 100
-	environment = ENVIRONMENTS[0]
+	environment = ENVIRONMENTS[5]
 	env = gym.make(environment)
 	action_space = range(env.action_space.n)
 
 	act_funcs = get_act_funcs(env, n_funcs=100)
 	approximator = NaiveApproximator(action_space, discount=0.6, act_funcs=act_funcs, alpha=0.4)
-	naive_q_learning_eps = Agent( env, approximator, eps=0.2, max_timesteps=max_timesteps)
+	naive_q_learning_eps = MDPAgent( env, approximator, eps=0.2, max_timesteps=max_timesteps)
 
 	act_funcs2 = get_act_funcs(env, n_funcs=100)
 	approximator_stochastic = NaiveApproximator(action_space, discount=0.6, act_funcs=act_funcs2, alpha=0.4)
-	naive_q_learning = Agent( env, approximator_stochastic, max_timesteps=max_timesteps)
+	naive_q_learning = MDPAgent( env, approximator_stochastic, max_timesteps=max_timesteps)
 
 	random_policy = RandomPolicy(action_space)
-	random_agent = Agent(env, random_policy, max_timesteps=max_timesteps)
+	random_agent = MDPAgent(env, random_policy, max_timesteps=max_timesteps)
 
 	agents = [
-	('Naive with eps', naive_q_learning ),
-	('Naive', naive_q_learning_eps),
+	('Naive with eps', naive_q_learning_eps ),
+	('Naive', naive_q_learning),
 	#('Random Agent', random_agent)
 	]
 	

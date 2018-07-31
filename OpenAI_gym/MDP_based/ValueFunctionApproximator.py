@@ -18,13 +18,10 @@ class ValueFunctionApproximator(Policy, metaclass=ABCMeta):
 		return max(map(lambda a: self.evaluate(s,a), self.action_space))
 
 	def get_action(self, s):
-		if self.stochastic:
-			return self.get_stochastic_action(s)
-		else:
-			values = list(map(lambda a: (a, self.evaluate(s,a)), self.action_space))
-			best = max(values, key=lambda x: x[1])[1]
-			best_actions = list(map(lambda x: x[0], filter(lambda x: x[1]==best, values)))
-			return rnd.choice(best_actions)
+		values = list(map(lambda a: (a, self.evaluate(s,a)), self.action_space))
+		best = max(values, key=lambda x: x[1])[1]
+		best_actions = list(map(lambda x: x[0], filter(lambda x: x[1]==best, values)))
+		return rnd.choice(best_actions)
 
 	def get_distribution(self, s):
 		# Get stochastic policy using the softmax function over the approximated value function at a state.
@@ -41,11 +38,11 @@ class NaiveApproximator(ValueFunctionApproximator):
 		self.method = method
 		super().__init__(action_space, discount)
 
-	def init_params(self):
-		self.W = { a: np.zeros(len(self.act_funcs)) for a in self.action_space }
+	def get_params_dim(self):
+		return len(self.action_space) * len(self.act_funcs)
 
-	def get_params(self):
-		return self.W.copy()
+	def init_params(self):
+		self.params = { a: np.zeros(len(self.act_funcs)) for a in self.action_space }
 
 	def update_params(self, sold, a, snew, reward):
 		if self.method=='Q_learning':
@@ -54,7 +51,7 @@ class NaiveApproximator(ValueFunctionApproximator):
 			TD = reward + self.discount*self.evaluate(snew,a)- self.evaluate(sold,a)
 		else:
 			raise ValueError('The method {} is not supported'.format(method))
-		self.W[a] += self.alpha*TD*self.eval_act_funcs(sold)
+		self.params[a] += self.alpha*TD*self.eval_act_funcs(sold)
 
 	def eval_act_funcs(self,s):
 		evaluated = np.array([f(s) for f in self.act_funcs])
@@ -63,4 +60,4 @@ class NaiveApproximator(ValueFunctionApproximator):
 
 	# Evaluate the Q function at state, action.
 	def evaluate(self,s,a):
-		return np.dot(self.W[a], self.eval_act_funcs(s))
+		return np.dot(self.params[a], self.eval_act_funcs(s))

@@ -14,19 +14,27 @@ class MDPAgent():
 
 	def __perform_episode(self,train=True, render=False):
 		print("New Episode")
-		self.policy.stochastic = train # sample actions according to probability distrbution during training if possible
 		total_reward = 0
 		self.observation = self.env.reset()
 		for timestep in range(self.max_timesteps):
 			if render:
 				self.env.render()
+
+			# Get action
 			if train and (0<self.eps<1) and rnd.choice([True, False],size=1, p=[self.eps,1-self.eps]):
 				action = self.env.action_space.sample()
+			elif train:
+				try: # During training, use stochastic action if possible
+					action = self.policy.get_stochastic_action(self.observation)
+				except:
+					action = self.policy.get_action(self.observation)
 			else:
 				action = self.policy.get_action(self.observation)
+			
+			# Update everything
 			observation, reward, done, info = self.env.step(action)
 			if train:
-				self.policy.update_params_online(self.observation, action, observation, reward)
+				self.policy.update_params(self.observation, action, observation, reward)
 			self.observation = observation
 			total_reward += reward
 			if done:
