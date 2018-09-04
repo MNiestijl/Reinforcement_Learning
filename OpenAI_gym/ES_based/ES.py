@@ -2,6 +2,8 @@ import numpy as np
 import numpy.random as rnd
 from copy import copy
 
+# NOTICE: "Policy" currently does not guarantee support vectorized parameters, as is required for this code to work!
+
 class ES():
 	"""
 	Paper: https://arxiv.org/abs/1703.03864
@@ -17,12 +19,12 @@ class ES():
 		sigma: noise variance
 		"""
 		self.policy = policy
-		self.params = copy(policy.params)
+		self.params = copy(policy.params) # We need a copy because policy.params changes a lot (to estimate the gradient stochastically).
 		self.env = env
 		self.observation = observation if observation else env.reset()
 		self.max_timesteps = max_timesteps
 
-	def __perform_episode(self, train=True, render=False):
+	def __perform_episode(self, render=False):
 		#
 		"""
 		TODO: This can be done in parallel.
@@ -52,17 +54,17 @@ class ES():
 		d = self.policy.params_dim
 		eps = np.multivariate_normal(np.zeros(d), np.eye(d), size=n_episodes)
 
-		def func(i_sample):
+		def estimate_gradient(i_sample):
+			render = (render_episodes>0) and (i_sample % render_episodes==0)
 			self.policy.params = self.params + self.sigma*eps[i_sample]
-			score1 = self.__perform_episode(render=(render_episodes>0) and (i_sample % render_episodes==0))
-
+			score1 = self.__perform_episode(render=render)
 			self.policy.params = self.params - self.sigma*eps[i_sample]
-			score2 = self.__perform_episode(render=(render_episodes>0) and (i_sample % render_episodes==0))
+			score2 = self.__perform_episode(render=render)
 			return (score1 - score2)/(2*sigma) # CHECK IF THIS IS CORRECT!.. Estimate of gradient.
 
-		scores = list(map(func, range(n_episodes)))
-		self.params += self.alpha * np.inner(scores, eps)/n_episodes
+		gradient_estimates = list(map(estimate_gradient, range(n_episodes)))
+		self.params += self.alpha * np.inner(gradient_estimates, eps)/n_episodes
 			
 	def scores(self, n_episodes, render_episodes=0):
-		func = lambda i_episode: self.__perform_episode(train=False, render=(render_episodes>0) and (i_episode % render_episodes==0))
+		func = lambda i_episode: self.__perform_episode(render=(render_episodes>0) and (i_episode % render_episodes==0))
 		return list(map(func, range(n_episodes)))

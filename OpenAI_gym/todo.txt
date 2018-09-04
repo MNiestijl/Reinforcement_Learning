@@ -1,9 +1,18 @@
-Implement Deep Q learning
-implement 'experience replay'
-implement 'freezing target networks'
+Implement 'Expected Sarsa' for improved Q learning
 
-Implement a basic policy gradient algorithm 
-Actor critic algorithm?
+Implement 'Importance sampling ratio' in off-policy methods (using a 'control variate').
+Implement 'Prioritized Experience replay' (based on TD-error, with importance sampling to avoid bias in the update distribution).
+Implement 'n-step tree backup algorithm'
+
+Implement 'Double Q learning':
+Implement 'Dueling architecture'
+Two estimates of Q-function that can switch roles between actor and critic. 
+The action is samples according to Q1 + Q2.
+At each timestep, only one of the two Q-functions is updated. (why?)
+
+
+Implement n-step TD methods and understand the impact of 'n'
+
 
 Implement 'saddle-free Newton's method' to (greatly?) improve performance of high dimensional optimization (e.g. neural nets)
 

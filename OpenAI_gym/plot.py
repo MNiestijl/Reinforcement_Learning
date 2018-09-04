@@ -4,6 +4,7 @@ import numpy as np
 def plot_improvement(agent, n_episodes, sample_size, train_size=1,ax=None, figure=-1):
 
 	def func(sample):
+		print("Training episode {}".format(sample))
 		for i in range(train_size):
 			agent.train()
 		return agent.scores(sample_size)

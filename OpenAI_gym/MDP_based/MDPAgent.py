@@ -1,40 +1,53 @@
 import numpy as np
-import numpy.random as rnd
+import random
+from collections import deque
+
 
 class MDPAgent():
-	#TODO: Implement 'experience replay' to make algorithm more efficient and avoid bad feedback loops
-	# TODO: Make it such that agent uses distributions during training if possible but not during scoring.
 
-	def __init__(self, env, policy, observation=None, max_timesteps=100, eps=0):
+	def __init__(self, env, policy, observation=None, max_timesteps=1000, eps=0, eps_decay=0.99, memory_len=int(1e3), train_n_samples=1):
 		self.policy = policy
 		self.env = env
 		self.observation = observation if observation else env.reset()
 		self.max_timesteps = max_timesteps
 		self.eps = eps
+		self.eps_decay = eps_decay
+		self.train_n_samples=train_n_samples
+		self.experiences = deque(maxlen=memory_len)
+
+	def _get_action(self, train=True):
+		# During training, take epsilon-greedy action.
+		if train:
+			take_random_action =  random.choices([True, False], weights=[self.eps,1-self.eps])[0]
+			if take_random_action:
+				action = self.env.action_space.sample()
+			else:
+				try: 
+					# During training, use stochastic action if possible
+					action = self.policy.get_stochastic_action(self.observation)
+				except NotImplementedError:
+					action = self.policy.get_action(self.observation)
+		else:
+
+			action = self.policy.get_action(self.observation)
+		return action
 
 	def __perform_episode(self,train=True, render=False):
-		print("New Episode")
 		total_reward = 0
 		self.observation = self.env.reset()
 		for timestep in range(self.max_timesteps):
+
 			if render:
 				self.env.render()
-
-			# Get action
-			if train and (0<self.eps<1) and rnd.choice([True, False],size=1, p=[self.eps,1-self.eps]):
-				action = self.env.action_space.sample()
-			elif train:
-				try: # During training, use stochastic action if possible
-					action = self.policy.get_stochastic_action(self.observation)
-				except:
-					action = self.policy.get_action(self.observation)
-			else:
-				action = self.policy.get_action(self.observation)
-			
-			# Update everything
-			observation, reward, done, info = self.env.step(action)
+			action = self._get_action(train=train)
+			observation, reward, done, info  = self.env.step(action)
+			new_experience = (self.observation, action, observation, reward, done)
 			if train:
-				self.policy.update_params(self.observation, action, observation, reward)
+				# For now, we only use experiences gained during a training phase
+				self.experiences.append(new_experience)
+				train_experiences = random.choices(list(self.experiences), k=self.train_n_samples)
+				self.policy.train_on_batch(train_experiences)
+				self.eps *= self.eps_decay
 			self.observation = observation
 			total_reward += reward
 			if done:
