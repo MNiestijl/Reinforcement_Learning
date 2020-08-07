@@ -35,6 +35,13 @@ def main():
 	random_policy = RandomPolicy(action_space_size)
 	random_agent = MDPAgent(env, random_policy, max_timesteps=max_timesteps)
 
+	act_funcs = get_act_funcs(env, n_funcs=100)
+	sarsa_approximator = NaiveApproximator(action_space, discount=0.6, act_funcs=act_funcs, alpha=0.4, method='SARSA')
+	naive_sarsa = MDPAgent( env, sarsa_approximator, eps=0.2, max_timesteps=max_timesteps)
+
+	act_funcs2 = get_act_funcs(env, n_funcs=100)
+	q_learning_approximator = NaiveApproximator(action_space, discount=0.6, act_funcs=act_funcs2, alpha=0.4)
+	naive_q_learning = MDPAgent( env, q_learning_approximator, max_timesteps=max_timesteps)
 
 	
 	# We assume the state space is of type Box here!
@@ -120,6 +127,8 @@ def main():
 	#('Neural Q Learning', dqn_agent),
 	('Actor Critic', actor_critic_agent),
 	('Random Agent', random_agent),
+	('Naive SARSA', naive_sarsa ),
+	('Naive Q Learning', naive_q_learning),
 	]
 	
 	#naive_q_learning.train(n_episodes=10, render_episodes=0)

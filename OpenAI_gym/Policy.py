@@ -8,7 +8,6 @@ class Policy():
 	The policy may be either stochastic or deterministic. In the former case, implement the get_distribution method.
 	In the latter case, implement the get_action method. At least one of these two must always be implemented.
 	"""
-
 	def __init__(self, action_space_size):
 		self.action_space_size = action_space_size
 		self.action_space = range(action_space_size)

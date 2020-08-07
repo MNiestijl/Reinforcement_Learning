@@ -214,7 +214,7 @@ class NaiveApproximator(Q_Approximator):
 		self.alpha = alpha
 		self.method = method
 		self.params = { a: np.zeros(len(self.act_funcs)) for a in self.action_space }
-		super().__init__(action_space)
+		super().__init__(action_space, discount)
 
 	def update(self, sold, a, snew, reward):
 		if self.method=='Q_learning':
