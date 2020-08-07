@@ -75,7 +75,7 @@ def bernoulli_trial(p):
 
 class Layer():
 	def __init__(self, d_in, d_out, init_connections, init_params=None, act_fn=lambda x: np.max(0,x), 
-		p_grow_outer=0.01, p_shrink_outer=0.02, p_grow_inner=0.1, p_shrink_inner=0.1):
+		p_grow_outer=0.1, p_shrink_outer=0.12, p_grow_inner=0.1, p_shrink_inner=0.1):
 		"""
 		d_in and d_out are input/output dimensions.
 		init_connections is supposed to be a list of length d_out containing a lists of input indices for each output.
@@ -95,21 +95,40 @@ class Layer():
 		"""
 		The following are parameters that could be adapted.
 		"""
+		self.covs = [ Layer._get_init_cov(d_w) for d_w in self.weight_dims ]
 
-		scale = np.random.choice([2**x for x in range(-4,3)])
-		self.covs = [ np.eye(d_w) for d_w in weight_dims ]
-		self.covs_eps = [2**x for x in range(-15,7)]
 
-	def add_inputs(self, n_new):
+	@staticmethod
+	def _get_cov_scale():
+		return np.random.choice([2**x for x in range(-4,3)])
+
+	@staticmethod
+	def _get_init_cov(d_w):
+		return Layer._get_cov_scale() * np.eye(d_w) for d_w in self.weight_dims
+
+	def _get_cov_eps(self):
+		possible_scales = [2**x * np.eye(d_w) for x in range(-15,7)]
+		return [ np.random.choice(possible_scales) for _ in self.weight_dims ]
+
+	def add_inputs(self, n):
+		self.d_in = d_in + n
+		self.weights = [ np.concatenate((w,np.zeros(n))) for w in self.weights ]
+		off_diagonals = [ np. zeros((d_w, n)) for d_w in self.weight_dims]
+		make_diag = lambda A,B,C, D: np.asarray(np.bmat([[A, B], [C, D]])) # assumes the dimensions match
+		self.covs = [ make_diag(cov,Z, Z, Layer._get_init_cov(d_w)) for cov, Z, d_w in zip(self.covs, off_diagonals, self.weight_dims) ]
+		self.update()
+
+	def add_outputs(self, n):
+		self.d_out = d_out + n
+		self.connections += [[]]*n
+		self.weights += [np.zeros(0)]*n
+		self.covs += [np.zeros((0,0))]
+		self.update()
+
+	def remove_inputs(self, n):
 		pass #TODO
 
-	def add_outputs(self, n_new):
-		pass #TODO
-
-	def remove_inputs(self, n_new):
-		pass #TODO
-
-	def remove_outputs(self, n_new):
+	def remove_outputs(self, n):
 		pass #TODO
 
 	def update(self):
@@ -124,7 +143,7 @@ class Layer():
 		w = self.weights[i]
 		if not ix: # If list is empty
 			return 0
-		return self.act_fn(np.dot(w,ix))
+		return self.act_fn(np.dot(w,x[ix]))
 
 
 	def evaluate(self, x):
@@ -139,29 +158,37 @@ class Layer():
  		return np.array([ self._evaluate(x, i) for i in range(len(self.connections)) ])
 
 	def grow(self):
-		if self.p_grow_outer > 0 and bernoulli_trial(self.p_grow_outer):
+		"""
+		Add for each output a new connection with some probability.
+		"""
+		if self.p_grow_outer>0 and bernoulli_trial(self.p_grow_outer):
 			for i, _ in enumerate(self.connections):
-				if self.p_grow_inner > 0 and bernoulli_trial(self.p_grow_inner):
+				while self.p_grow_inner>0 and self.not_connected[i] and bernoulli_trial(self.p_grow_inner):
 					new = np.random.choice(self.not_connected[i])
 					self.connections[i].append(new)
 					np.append(self.weights[i], 0) # Set the weight to the new connection to be zero.
+					self.update()
 	def shrink(self):
-		pass #TODO
+		"""
+		Remove for each output a connection with some probability
+		"""
+		if self.p_shrink_outer>0 and bernoulli_trial(self.p_shrink_outer):
+			for i, ix in enumerate(self.connections):
+				while self.p_shrink_inner>0 and ix and bernoulli_trial(self.p_shrink_inner):
+					i_rem = np.random.choice(range(len(ix)))
+					ix.remove(ix[i_rem])
+					self.weights[i] = np.delete(self.weights[i], i_rem) 
+					self.update()
 
 
 	def mutate(self):
-		"""
-		Can add an index or remove and index, or both.
-		"""
-
 		self.grow()
 		self.shrink()
-		self.update()
 
 	def perturb_params(self):
 		epsilons = [ np.random.multivariate_normal(self.zeros(d_w), cov) for d_w, cov in zip(self.weight_dims, self.covariances) ]
 		self.weights = [ w + e for w,e in zip(self.weights, epsilons)]
-		cov_eps = [ np.random.choice(self.cov_eps) for _ in self.weight_dims ]
+		cov_eps = self._get_cov_eps()
 		self.covs = [ cov + e for cov, e in zip(self.covs, cov_eps) ]
 
 
@@ -169,8 +196,8 @@ def get_new_layer(d_in, d_out):
 	"""
 	Each output is connected to a single input, which is chosen randomly.
 	"""
-		initial_connections = [ np.random.choice(range(d_in)) for _ in range(d_out) ]
-		return Layer(d_in, d_out, initial_connections)
+	initial_connections = [ np.random.choice(range(d_in)) for _ in range(d_out) ]
+	return Layer(d_in, d_out, initial_connections)
 
 
 
