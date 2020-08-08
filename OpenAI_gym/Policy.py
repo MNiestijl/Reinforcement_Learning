@@ -12,11 +12,11 @@ class Policy():
 		self.action_space_size = action_space_size
 		self.action_space = range(action_space_size)
 
-	def update(self, sold, a, snew, reward, done):
-		raise NotImplementedError("Online updating is not supported")
+	# def update(self, sold, a, snew, reward, done):
+	# 	raise NotImplementedError("Online updating is not supported")
 
-	def update_by_target(self, s, a, target):
-		raise NotImplementedError("Updating by target is not supported")
+	# def update_by_target(self, s, a, target):
+	# 	raise NotImplementedError("Updating by target is not supported")
 
 	def get_distribution(self, s):
 		raise NotImplementedError("The method 'get_distribution' is not implemented.")
@@ -32,10 +32,13 @@ class Policy():
 			raise("At least one of the methods 'get_action' or 'get_distribution' must be implemented")
 
 	# This method can be overridden.
+	# Experience is of the form (sold, a, snew, reward, done)
 	def train_on_batch(self, experiences):
-		# Experience is of the form (sold, a, snew, reward)
-		for experience in experiences:
-			self.update(*experience)
+		pass
+
+		
+		# for experience in experiences:
+		# 	self.update(*experience)
 
 
 class RandomPolicy(Policy):
@@ -46,25 +49,31 @@ class RandomPolicy(Policy):
 	def get_action(self, state):
 		return rnd.choice(self.action_space)
 
-	def update(self, sold, a, snew, reward, done):
-		pass
+	# def update(self, sold, a, snew, reward, done):
+	# 	pass
 
 class NeuralPolicy(Policy):
 	"""
 	model: A neural network that maps State -> Distribution over Actions
-	target: A function mapping : sold, a, snew, reward, done -> R, that computes the target.
+	get_target: Function :: self, sold, a, snew, reward, done -> array 
 	""" 
 
-	def __init__(self, action_space_size, model):
+	def __init__(self, action_space_size, model, get_target):
 		self.action_space_size=action_space_size
 		self.model=model
+		self.get_target = get_target
+		super().__init__(action_space_size)
 
 	def get_distribution(self, state):
 		state = np.array(state).reshape(1,len(state))
 		return self.model.predict(state).flatten()
 
-	def update_by_target(self, s, a, target):
-		X = np.array(s).reshape(1, len(s)) # Convert to 1 * dim_state_space matrix
-		Y = np.zeros((1, self.action_space_size))
-		Y[0, a] = target
+	def train_on_batch(self, experiences):
+		states, actions, _, _, _ = zip(*experiences)
+		n_samples = len(experiences)
+		state_dim = len(states[0])
+		targets = np.array(list(map(lambda x: self.get_target(*x), experiences)))
+		X = np.stack(states)
+		Y = np.zeros((n_samples, self.action_space_size))
+		Y[:, actions] = targets
 		self.model.train_on_batch(X,Y)
