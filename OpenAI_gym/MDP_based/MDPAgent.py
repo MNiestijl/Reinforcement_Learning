@@ -18,6 +18,7 @@ class MDPAgent():
 		self.train_n_samples=train_n_samples
 		self.n_steps = n_steps # perform n_steps inbetween parameter-fitting sessions. If n_steps=-1, then perform full-episodes.
 		self.experiences = deque(maxlen=memory_len)
+		self.counter = 1
 
 	def _get_action(self, train=True):
 		# During training, take epsilon-greedy action.
@@ -43,16 +44,18 @@ class MDPAgent():
 	def __perform_episode(self,train=True, render=False):
 		total_reward = 0
 		self.observation = self.env.reset()
-		for t in range(self.max_timesteps):
+		for _ in range(self.max_timesteps):
 			if render:
 				self.env.render()
 			action = self._get_action(train=train)
 			observation, reward, done, info  = self.env.step(action)
 			self.experiences.append((self.observation, action, observation, reward, done))
-			if train and not self.n_steps==-1 and t%self.n_steps==0:
+			if train and not self.n_steps==-1 and self.counter%self.n_steps==0:
 				self._update()
+				self.counter = 0
 			self.observation = observation
 			total_reward += reward
+			self.counter += 1
 			if done:
 				if self.n_steps==-1:
 					self._update()
