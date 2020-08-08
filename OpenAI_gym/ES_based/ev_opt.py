@@ -1,5 +1,6 @@
 import numpy as np
 import math as m
+import utils as u
 from collections import Counter, deque
 from abc import ABCMeta, abstractmethod
 
@@ -75,7 +76,7 @@ def bernoulli_trial(p):
 
 class Layer():
 	def __init__(self, d_in, d_out, init_connections, init_params=None, act_fn=lambda x: np.max(0,x), 
-		p_grow_outer=0.1, p_shrink_outer=0.12, p_grow_inner=0.1, p_shrink_inner=0.1):
+		p_grow_outer=0.1, p_shrink_outer=0.12, p_grow_inner=0.1, p_shrink_inner=0.1, out_dimension_fixed=False, in_dimension_fixed=False):
 		"""
 		d_in and d_out are input/output dimensions.
 		init_connections is supposed to be a list of length d_out containing a lists of input indices for each output.
@@ -90,7 +91,9 @@ class Layer():
 		self.p_grow_outer = p_grow_outer
 		self.p_grow_inner = p_grow_inner
 		self.p_shrink_outer = p_shrink_outer
-		self.p_shrink_inner = p_shrink_inner
+		self.p_shrink_inner = p_shrink_inner\
+		self.out_dimension_fixed = out_dimension_fixed
+		self.in_dimension_fixed = in_dimension_fixed
 
 		"""
 		The following are parameters that could be adapted.
@@ -111,7 +114,9 @@ class Layer():
 		return [ np.random.choice(possible_scales) for _ in self.weight_dims ]
 
 	def add_inputs(self, n):
-		self.d_in = d_in + n
+		if self.in_dimension_fixed:
+			return
+		self.d_in = self.d_in + n
 		self.weights = [ np.concatenate((w,np.zeros(n))) for w in self.weights ]
 		off_diagonals = [ np. zeros((d_w, n)) for d_w in self.weight_dims]
 		make_diag = lambda A,B,C, D: np.asarray(np.bmat([[A, B], [C, D]])) # assumes the dimensions match
@@ -119,17 +124,33 @@ class Layer():
 		self.update()
 
 	def add_outputs(self, n):
-		self.d_out = d_out + n
+		if self.out_dimension_fixed:
+			return
+		self.d_out = self.d_out + n
 		self.connections += [[]]*n
 		self.weights += [np.zeros(0)]*n
 		self.covs += [np.zeros((0,0))]
 		self.update()
 
 	def remove_inputs(self, n):
-		pass #TODO
+		if self.in_dimension_fixed or n>self.d_in:
+			return
+		inds = np.random.choice(range(self.d_in), size=n, replace=False)
+		self.d_in =  self.d_in - n
+		self.weights = [ np.delete(w, inds) for w in self.weights ]
+		self.covs = [ np.delete(cov, inds, axis=0) for cov in self.covs ] # delete rows
+		self.covs = [ np.delete(cov, inds, axis=1) for cov in self.covs ] # delete columns
+		self.update()
 
 	def remove_outputs(self, n):
-		pass #TODO
+		if self.out_dimension_fixed or n>self.d_out:
+			return
+		inds = np.random.choice(range(self.d_out), size=n, replace=False)
+		for i in inds:
+			del self.connections[i]
+			del self.weights[i]
+			del self.covs[i]
+		self.update()
 
 	def update(self):
 		self.not_connected = [ list(set(range(0, d_in)) - set(ix)) for ix in self.connections]
@@ -159,7 +180,7 @@ class Layer():
 
 	def grow(self):
 		"""
-		Add for each output a new connection with some probability.
+		Add for each output a new connection with an unconnected input, with some probability.
 		"""
 		if self.p_grow_outer>0 and bernoulli_trial(self.p_grow_outer):
 			for i, _ in enumerate(self.connections):
@@ -170,7 +191,10 @@ class Layer():
 					self.update()
 	def shrink(self):
 		"""
-		Remove for each output a connection with some probability
+		Remove for each output a connection with some probability.
+
+		TODO: Currently, a connection to be deleted is chosen uniformly random. 
+		Would be nice if this distribution is more well-informed, deleting the 'least useful' one more often.
 		"""
 		if self.p_shrink_outer>0 and bernoulli_trial(self.p_shrink_outer):
 			for i, ix in enumerate(self.connections):
@@ -192,12 +216,13 @@ class Layer():
 		self.covs = [ cov + e for cov, e in zip(self.covs, cov_eps) ]
 
 
-def get_new_layer(d_in, d_out):
+
+def get_new_layer(d_in, d_out, **kwargs):
 	"""
 	Each output is connected to a single input, which is chosen randomly.
 	"""
 	initial_connections = [ np.random.choice(range(d_in)) for _ in range(d_out) ]
-	return Layer(d_in, d_out, initial_connections)
+	return Layer(d_in, d_out, initial_connections, **kwargs)
 
 
 
@@ -214,8 +239,11 @@ class NetworkSection():
 
 	def _perform_init_checks(self):
 		# Input and output dimensions of the whole network.
-		assert layers[0].d_in==self.d_in, "The input dimension does not match the specified dimension"
-		assert layers[-1].d_out==self.d_out, "The output dimension does not match the specified dimension"
+		assert self.layers[0].d_in==self.d_in, "The input dimension does not match the specified dimension"
+		assert self.layers[-1].d_out==self.d_out, "The output dimension does not match the specified dimension"
+		assert 0<self.p_new_layer<1
+		assert 0<self.p_new_node<1
+		assert 0<self.p_remove_node<1
 
 	def _n_inputs_of_layer_at_position(self, pos):
 		pass
@@ -225,15 +253,13 @@ class NetworkSection():
 		# If a layer has no connections, remove all subsequent layer and make a new layer with self.d_out outputs.
 		i_unconnected = -1
 		for i, layer in enumerate(self.layers):
-			if not layer.connections: # check if list is empty
+			if not layer.connections:
 				i_unconnected = i
 		if i_unconnected != -1:
 			self._insert_layer_at_position(i_unconnected)
 			self.layers = self.layers[:i_unconnected]
 			d_in = self._n_inputs_of_layer_at_position(i_unconnected)
-			#d_in = self.layers[-1].d_out
-			d_out = self.d_out
-			self.layers.append(get_new_layer(d_in. d_out))
+			self.layers.append(get_new_layer(d_in. self.d_out))
 
 		self.n_layers = len(self.layers)
 		self.cum_out_dims = np.cumsum([ layer.d_out for layer in self.layers])
@@ -257,10 +283,10 @@ class NetworkSection():
 		# Add and remove nodes in between layers
 		for i in range(self.n_layers-1):
 			first_layer, second_layer = self.layers[i], self.layers[i+1]
-			if self.p_new_node>0 and bernoulli_trial(self.p_new_node):
+			while self.p_new_node>0 and bernoulli_trial(self.p_new_node):
 				first_layer.add_outputs(1)
 				second_layer.add_inputs(1)
-			if self.p_remove_node>0 and bernoulli_trial(self.p_remove_node):
+			while self.p_remove_node>0 and bernoulli_trial(self.p_remove_node):
 				first_layer.remove_outputs(1)
 				second_layer.remove_inputs(1)
 
@@ -300,7 +326,6 @@ class NetworkSection2(NetworkSection):
 	"""
 	def __init__(self, *args, **kwargs)
 		super().__init__(*args, **kwargs)
-		self.input_dims = self.
 
 	def _perform_init_checks(self):
 		super()._perform_init_checks()
@@ -311,7 +336,7 @@ class NetworkSection2(NetworkSection):
 
 
 	def _n_inputs_of_layer_at_position(self, pos):
-		return self.layers[pos-1].d_out if pos>0 else self.d_in
+		return self.d_in + self.cum_out_dims[pos-1]if pos>0 else self.d_in
 
 	def evaluate(self, inpt):
 		output = inpt
@@ -320,8 +345,7 @@ class NetworkSection2(NetworkSection):
 		for layer in self.layers:
 			output = np.concatenate((output, layer.evaluate(output)))
 		return output
-
-
+    
 
 class evolutionary_NN():
 	"""
@@ -341,23 +365,73 @@ class evolutionary_NN():
 
 		How to do the third section? Maybe leave it out for now.
 	"""
-	def __init__(self, section_1, section_2):
-		pass
+	def __init__(self, section_1, section_2, d_out, p_new_node=0.01, p_remove_node=0.012):
+		self.section_1 = section_1
+		self.section_2 = section_2
+		self.d_in = section_1.d_in
+		self.d_out = d_out
+		self.final_layer = get_new_layer(self.section_2.d_out, d_out, act_fn=lambda x: x, out_dimension_fixed=True)
+		self.p_new_node = p_new_node
+		self.p_remove_node = p_remove_node
+		assert 0<self.p_new_node<1
+		assert 0<self.p_remove_node<1
 
-	def evaluate(self, state):
-		pass
+	def evaluate(self, x):
+		"""
+		Returns a probability distribution over the output dimensions
+		"""
+		x = self.section_1.evaluate(x)
+		x = self.section_2.evaluate(x)
+		x = self.final_layer.evaluate(x)
+		return u.softmax(x)
+
+	def sample_output(self, x):
+		"""
+		Samples from the distribution resulting from self.evaluate. Returns an integer in between (0, self.d_out)
+		"""
+		return np.random.choice(range(self.d_out), self.evaluate(x))
 
 	def mutate(self):
-		"""
-		For each sections, define possibly mutations. 
-		Both growing and decreasing the network should be possible. 
-		"""
-		pass
+		self.section_1.mutate()
+		self.section_2.mutate()
+		self.final_layer.mutate()
+
+		# Make this into a function...
+		while self.p_new_node>0 and bernoulli_trial(self.p_new_node):
+				self.section_1.layers[-1].add_outputs(1)
+				self.section_2.layers[0].add_inputs(1)
+		while self.p_remove_node>0 and bernoulli_trial(self.p_remove_node):
+				self.section_1.layers[-1].remove_outputs(1)
+				self.section_2.layers[0].remove_inputs(1)
+
+		while self.p_new_node>0 and bernoulli_trial(self.p_new_node):
+				self.section_2.layers[-1].add_outputs(1)
+				self.final_layer[0].add_inputs(1)
+		while self.p_remove_node>0 and bernoulli_trial(self.p_remove_node):
+				self.section_2.layers[-1].remove_outputs(1)
+				self.final_layer[0].remove_inputs(1)
+
+		# Add and remove nodes in between layers
+		for i in range(self.n_layers-1):
+			first_layer, second_layer = self.layers[i], self.layers[i+1]
+			while self.p_new_node>0 and bernoulli_trial(self.p_new_node):
+				first_layer.add_outputs(1)
+				second_layer.add_inputs(1)
+			while self.p_remove_node>0 and bernoulli_trial(self.p_remove_node):
+				first_layer.remove_outputs(1)
+				second_layer.remove_inputs(1)
 
 	def perturb_params(self):
-		pass
+		self.section_1.perturb_params()
+		self.section_2.perturb_params()
+		self.final_layer.perturb_params()
 
-def pair_ENN(network_1, network_2):
+def pair_ENN(network_1_index, network_2_index):
+	"""
+	For now, just forget the averaging of parameters.
+	Just compare their scores, define a probability distribution over {1,2} based on these scores,
+	and sample from the two networks using this distribution.
+	"""
 	pass
 
 
@@ -372,8 +446,8 @@ class EvolutionaryPolicyOptimizer():
 		self.states = [ env.reset() for env in self.envs ]
 		self.initial_policy = initial_policy
 		self.policies = [initial_policy for _ in range(population_size)]
-		self.rewards_avg = RunningAverage(N=100)
-		self.rewards_min = RunningMinimum(N=100)
+		self.rewards_avg = [ RunningAverage(N=100) for _ in range(population_size) ]
+		# self.rewards_min = RunningMinimum(N=100)
 		self.step_fns = [ lambda : env.step(pol.get_action(s)) for env, s, pol in zip(self.envs, self.states, self.policies) ]
 
 	def train(self, n_repeats, n_steps=1, mode='average'):
@@ -401,3 +475,11 @@ class EvolutionaryPolicyOptimizer():
 			with probability p_perturb, add gaussian noise to the parameters, with mean 0 and a covariance matrix that is part of the parameters!
 
 		"""
+
+	def score(self, n_episodes):
+		"""
+		Either choose the policy with the highest scoring average, or emply sample from some probability distribution over the result of all policies in the population.
+
+		Returns the total scores over the n episodes.
+		"""
+		pass

@@ -62,14 +62,14 @@ def main():
 	state_space_dim = state_space_shape[0]
 	
 	Q_model_1 = Sequential()
-	Q_model_1.add(Dense(32, activation='relu', input_shape=state_space_shape))
-	Q_model_1.add(Reshape((32,1)))
+	Q_model_1.add(Dense(16, activation='relu', input_shape=state_space_shape))
+	Q_model_1.add(Reshape((16,1)))
+	Q_model_1.add(Conv1D(16, 3, padding='same', activation='relu'))
+	Q_model_1.add(AveragePooling1D(pool_size=2))
 	Q_model_1.add(Conv1D(32, 3, padding='same', activation='relu'))
 	Q_model_1.add(AveragePooling1D(pool_size=2))
 	Q_model_1.add(Conv1D(64, 3, padding='same', activation='relu'))
-	Q_model_1.add(AveragePooling1D(pool_size=2))
-	Q_model_1.add(Conv1D(128, 3, padding='same', activation='relu'))
-	Q_model_1.add(Reshape((128*8,)))
+	Q_model_1.add(Reshape((64*4,)))
 	Q_model_1.add(Dense(action_space_size, activation='linear'))
 	Q_optimizer_1 = keras.optimizers.Adam(lr=1e-3, decay=1e-5)
 	Q_model_1.compile(loss='mae', optimizer=Q_optimizer_1)
@@ -81,10 +81,10 @@ def main():
 	Q_optimizer_2 = keras.optimizers.Adam(lr=1e-3, decay=1e-3)
 	Q_model_2.compile(loss='mae', optimizer=Q_optimizer_2)
 	
-	Q_learner = Neural_Q_Learner(action_space_size, Q_model_1, discount=discount, T=100)
+	Q_learner = Neural_Q_Learner(action_space_size, Q_model_1, discount=discount, T=200)
 	Q_learner_2 = Neural_Q_Learner(action_space_size, Q_model_2, discount=discount, T=20)
 	q_critic = Q_learner_2.get_critic()
-	dqn_agent = MDPAgent(env, Q_learner, eps=0.3, eps_decay=1, max_timesteps=max_timesteps, train_n_samples=train_n_samples, n_steps=n_steps)
+	dqn_agent = MDPAgent(env, Q_learner, eps=0.1, eps_decay=1, max_timesteps=max_timesteps, train_n_samples=train_n_samples, n_steps=n_steps)
 
 	V_model = Sequential()
 	V_model.add(Dense(32, input_shape=state_space_shape, activation='relu'))

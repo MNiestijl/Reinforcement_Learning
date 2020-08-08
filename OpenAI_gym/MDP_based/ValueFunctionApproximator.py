@@ -1,4 +1,5 @@
 from Policy import Policy, NeuralPolicy
+import utils as u
 from MDP_based.ActorCritic import Q_Critic
 import numpy as np
 import numpy.random as rnd
@@ -79,17 +80,14 @@ class Neural_Q_Learner(NeuralPolicy):
 
 	def get_action(self, s):
 		values = self.get_values(s)
+		distribution= u.softmax(values)
 		best = max(values)
 		best_actions = list(filter(lambda a: values[a]==best, self.action_space))
 		return rnd.choice(best_actions)
 	
 	def get_distribution(self, s):
 		# Get a distribution using the softmax function over the approximated value function of all possible actions at state s.
-		vals = self.get_values(s)
-		max_val = max(vals)
-		xs = list(map(lambda a: m.exp(vals[a]-max_val), self.action_space))
-		total = sum(xs)
-		return list(map(lambda x: x/total, xs))
+		return u.softmax(self.get_values(s))
 
 	def train_on_batch(self, experiences):
 		super().train_on_batch(experiences)
