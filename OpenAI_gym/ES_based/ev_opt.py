@@ -1,3 +1,6 @@
+import sys, os
+sys.path.insert(1, os.path.join(sys.path[0], '..')) # to acces parent folder for imports.
+
 import numpy as np
 import math as m
 import utils as u
@@ -53,11 +56,15 @@ class RunningAverage():
 		if self.saturated:
 			oldest = self.values.pop()
 			self.current_value += 1/N * (x - oldest)
-		self.values.insert(0, x)
+		self.values.appendleft(x)
 		if not self.saturated:
 			self.length += 1
 			self.current_value = 1/self.length * sum(self.values)
 			self.saturated = (self.length == self.N)
+
+	# Just for convenience.
+	def get(self):
+		return self.current_value
 		
 	def reset(self):
 		self.values = deque(maxlen=self.N)
@@ -75,7 +82,7 @@ def bernoulli_trial(p):
 
 
 class Layer():
-	def __init__(self, d_in, d_out, init_connections, init_params=None, act_fn=lambda x: np.max(0,x), 
+	def __init__(self, d_in, d_out, init_connections, init_params=None, act_fn=lambda x: max(0,x), 
 		p_grow_outer=0.1, p_shrink_outer=0.12, p_grow_inner=0.1, p_shrink_inner=0.1, out_dimension_fixed=False, in_dimension_fixed=False):
 		"""
 		d_in and d_out are input/output dimensions.
@@ -91,7 +98,7 @@ class Layer():
 		self.p_grow_outer = p_grow_outer
 		self.p_grow_inner = p_grow_inner
 		self.p_shrink_outer = p_shrink_outer
-		self.p_shrink_inner = p_shrink_inner\
+		self.p_shrink_inner = p_shrink_inner
 		self.out_dimension_fixed = out_dimension_fixed
 		self.in_dimension_fixed = in_dimension_fixed
 
@@ -101,59 +108,46 @@ class Layer():
 		self.covs = [ Layer._get_init_cov(d_w) for d_w in self.weight_dims ]
 
 
+	def get_total_connections(self):
+		return np.sum([len(ix) for ix in self.connections])
+
 	@staticmethod
 	def _get_cov_scale():
 		return np.random.choice([2**x for x in range(-4,3)])
 
 	@staticmethod
 	def _get_init_cov(d_w):
-		return Layer._get_cov_scale() * np.eye(d_w) for d_w in self.weight_dims
-
-	def _get_cov_eps(self):
-		possible_scales = [2**x * np.eye(d_w) for x in range(-15,7)]
-		return [ np.random.choice(possible_scales) for _ in self.weight_dims ]
+		return Layer._get_cov_scale() * np.eye(d_w)
 
 	def add_inputs(self, n):
-		if self.in_dimension_fixed:
-			return
-		self.d_in = self.d_in + n
-		self.weights = [ np.concatenate((w,np.zeros(n))) for w in self.weights ]
-		off_diagonals = [ np. zeros((d_w, n)) for d_w in self.weight_dims]
-		make_diag = lambda A,B,C, D: np.asarray(np.bmat([[A, B], [C, D]])) # assumes the dimensions match
-		self.covs = [ make_diag(cov,Z, Z, Layer._get_init_cov(d_w)) for cov, Z, d_w in zip(self.covs, off_diagonals, self.weight_dims) ]
-		self.update()
+		pass
 
 	def add_outputs(self, n):
-		if self.out_dimension_fixed:
-			return
-		self.d_out = self.d_out + n
-		self.connections += [[]]*n
-		self.weights += [np.zeros(0)]*n
-		self.covs += [np.zeros((0,0))]
-		self.update()
+		pass
+		# if self.out_dimension_fixed:
+		# 	return
+		# self.d_out = self.d_out + n
+		# self.connections += [[]]*n
+		# self.weights += [np.zeros(0)]*n
+		# self.covs += [np.zeros((0,0))]
+		# self.update()
 
 	def remove_inputs(self, n):
-		if self.in_dimension_fixed or n>self.d_in:
-			return
-		inds = np.random.choice(range(self.d_in), size=n, replace=False)
-		self.d_in =  self.d_in - n
-		self.weights = [ np.delete(w, inds) for w in self.weights ]
-		self.covs = [ np.delete(cov, inds, axis=0) for cov in self.covs ] # delete rows
-		self.covs = [ np.delete(cov, inds, axis=1) for cov in self.covs ] # delete columns
-		self.update()
+		pass
 
 	def remove_outputs(self, n):
-		if self.out_dimension_fixed or n>self.d_out:
-			return
-		inds = np.random.choice(range(self.d_out), size=n, replace=False)
-		for i in inds:
-			del self.connections[i]
-			del self.weights[i]
-			del self.covs[i]
-		self.update()
+		pass
+		# if self.out_dimension_fixed or n>self.d_out:
+		# 	return
+		# inds = np.random.choice(range(self.d_out), size=n, replace=False)
+		# for i in inds:
+		# 	del self.connections[i]
+		# 	del self.weights[i]
+		# 	del self.covs[i]
+		# self.update()
 
 	def update(self):
-		self.not_connected = [ list(set(range(0, d_in)) - set(ix)) for ix in self.connections]
+		self.not_connected = [ list(set(range(self.d_in)) - set(ix)) for ix in self.connections]
 		self.weight_dims = [ len(ix) for ix in self.connections ]
 
 	def _evaluate(self, x, i):
@@ -173,10 +167,10 @@ class Layer():
 
 		This can maybe be done more efficiently by concatenating the input slices and using "reduceat" appropriately.
 		Also using binary masks, resulting in a (d_in × d_out)-sized **sparse** array could be useful.
- 		"""
- 		if not self.connections: # if list is empty
- 			return np.zeros()
- 		return np.array([ self._evaluate(x, i) for i in range(len(self.connections)) ])
+		"""
+		if not self.connections: # if list is empty
+			return np.zeros()
+		return np.array([ self._evaluate(x, i) for i in range(len(self.connections)) ])
 
 	def grow(self):
 		"""
@@ -188,6 +182,13 @@ class Layer():
 					new = np.random.choice(self.not_connected[i])
 					self.connections[i].append(new)
 					np.append(self.weights[i], 0) # Set the weight to the new connection to be zero.
+
+					# make covariance matrix larger by extending a scalar diagonally, with zeros on the off-diagonals.
+					d_w = self.weight_dims[i]
+					zero_1 = np.zeros((d_w, d_w))
+					zero_2 = np.zeros((1,1))
+					scalar = np.array([[Layer._get_cov_scale()]])
+					self.covs[i] = np.asarray(np.bmat([[self.covs[i], zero_2], [zero_1, scalar]]))
 					self.update()
 	def shrink(self):
 		"""
@@ -198,10 +199,12 @@ class Layer():
 		"""
 		if self.p_shrink_outer>0 and bernoulli_trial(self.p_shrink_outer):
 			for i, ix in enumerate(self.connections):
-				while self.p_shrink_inner>0 and ix and bernoulli_trial(self.p_shrink_inner):
-					i_rem = np.random.choice(range(len(ix)))
-					ix.remove(ix[i_rem])
-					self.weights[i] = np.delete(self.weights[i], i_rem) 
+				while self.p_shrink_inner>0 and len(ix)>1 and bernoulli_trial(self.p_shrink_inner): # try to replace the >1 condition by ".. and ix and ...".
+					i_rem = np.random.choice(range(n_connected))
+					self.connections[i].remove(ix[i_rem])
+					self.weights[i] = np.delete(self.weights[i], i_rem)
+					self.covs[i] = np.delete(self.covs[i], i_rem, axis=0)
+					self.covs[i] = np.delete(self.covs[i], i_rem, axis=1)
 					self.update()
 
 
@@ -209,11 +212,24 @@ class Layer():
 		self.grow()
 		self.shrink()
 
+
 	def perturb_params(self):
-		epsilons = [ np.random.multivariate_normal(self.zeros(d_w), cov) for d_w, cov in zip(self.weight_dims, self.covariances) ]
-		self.weights = [ w + e for w,e in zip(self.weights, epsilons)]
-		cov_eps = self._get_cov_eps()
-		self.covs = [ cov + e for cov, e in zip(self.covs, cov_eps) ]
+		"""
+		For now, we only perturb the coveriance matrix by multiples of the identity. Since it also starts this way, this means that
+		it will always remain a multiple of the identity. 
+
+		TODO!!
+		This should be fixed, as it is unnecessary and hinders performance. More general perturbations should make use of cov = A^T A and perturb the matrix A instead, to ensure the matrix 
+		is symmetric and positive definite. This should not be a major obstacle. 
+		"""
+		possible_scales = [2**x for x in range(-15,7)]
+
+		for i, (d_w, cov) in enumerate(zip(self.weight_dims, self.covs)):
+			if d_w==0:
+				continue
+			self.weights[i] += np.random.multivariate_normal(np.zeros(d_w), cov)
+			self.covs += np.random.choice(possible_scales) * np.eye(d_w)
+
 
 
 
@@ -221,7 +237,7 @@ def get_new_layer(d_in, d_out, **kwargs):
 	"""
 	Each output is connected to a single input, which is chosen randomly.
 	"""
-	initial_connections = [ np.random.choice(range(d_in)) for _ in range(d_out) ]
+	initial_connections = [ [np.random.choice(range(d_in))] for _ in range(d_out) ]
 	return Layer(d_in, d_out, initial_connections, **kwargs)
 
 
@@ -236,6 +252,9 @@ class NetworkSection():
 		self.p_remove_node = p_remove_node
 		self.update()
 		self._perform_init_checks()
+
+	def get_total_connections(self):
+		return sum([ layer.get_total_connections() for layer in self.layers ])
 
 	def _perform_init_checks(self):
 		# Input and output dimensions of the whole network.
@@ -305,15 +324,15 @@ class NetworkSection():
 			layer.perturb_params()
 
 
-class NetworkSection1(NetworkSection)
-	def __init__(self, *args, **kwargs)
+class NetworkSection1(NetworkSection):
+	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
 
 	def _perform_init_checks(self):
 		super()._perform_init_checks()
 		
 		# Input and output of subsequent layers
-		for each i, _ in range(self.n_layers-1):
+		for i, _ in range(self.n_layers-1):
 			assert layers[i].d_out==layers[i+1].d_in, "The dimensions of the input and output of subsequent layers should match"
 
 
@@ -324,14 +343,14 @@ class NetworkSection2(NetworkSection):
 	"""
 	Uses all previous inputs + the last output as the input of a subsequent layer.
 	"""
-	def __init__(self, *args, **kwargs)
+	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
 
 	def _perform_init_checks(self):
 		super()._perform_init_checks()
 
 		# Input and output of subsequent layers
-		for each i, _ in range(self.n_layers-1):
+		for i, _ in range(self.n_layers-1):
 			assert self.d_in + self.cum_out_dims[i]==layers[i+1].d_in, "The dimensions of the input and output of subsequent layers should match"
 
 
@@ -347,7 +366,7 @@ class NetworkSection2(NetworkSection):
 		return output
     
 
-class evolutionary_NN():
+class Evolutionary_NN():
 	"""
 	Should contain four sections:
 	1: layers that do not remember previous outputs
@@ -363,7 +382,8 @@ class evolutionary_NN():
 		For each output b, take the corresponding input slice and multiply it by the corresponding weight vector. 
 		Then sum and apply ReLu. 
 
-		How to do the third section? Maybe leave it out for now.
+		How to do the third section? Maybe leave it out for now. Maybe the following contains something interesting?
+		https://arxiv.org/pdf/1904.01554.pdf
 	"""
 	def __init__(self, section_1, section_2, d_out, p_new_node=0.01, p_remove_node=0.012):
 		self.section_1 = section_1
@@ -375,6 +395,9 @@ class evolutionary_NN():
 		self.p_remove_node = p_remove_node
 		assert 0<self.p_new_node<1
 		assert 0<self.p_remove_node<1
+
+	def get_total_connections(self):
+		return self.section_1.get_total_connections() + self.section_2.get_total_connections() + self.final_layer.get_total_connections
 
 	def evaluate(self, x):
 		"""
@@ -389,7 +412,7 @@ class evolutionary_NN():
 		"""
 		Samples from the distribution resulting from self.evaluate. Returns an integer in between (0, self.d_out)
 		"""
-		return np.random.choice(range(self.d_out), self.evaluate(x))
+		return np.random.choice(range(self.d_out), p=self.evaluate(x))
 
 	def mutate(self):
 		self.section_1.mutate()
@@ -411,75 +434,81 @@ class evolutionary_NN():
 				self.section_2.layers[-1].remove_outputs(1)
 				self.final_layer[0].remove_inputs(1)
 
-		# Add and remove nodes in between layers
-		for i in range(self.n_layers-1):
-			first_layer, second_layer = self.layers[i], self.layers[i+1]
-			while self.p_new_node>0 and bernoulli_trial(self.p_new_node):
-				first_layer.add_outputs(1)
-				second_layer.add_inputs(1)
-			while self.p_remove_node>0 and bernoulli_trial(self.p_remove_node):
-				first_layer.remove_outputs(1)
-				second_layer.remove_inputs(1)
 
 	def perturb_params(self):
 		self.section_1.perturb_params()
 		self.section_2.perturb_params()
 		self.final_layer.perturb_params()
 
-def pair_ENN(network_1_index, network_2_index):
-	"""
-	For now, just forget the averaging of parameters.
-	Just compare their scores, define a probability distribution over {1,2} based on these scores,
-	and sample from the two networks using this distribution.
-	"""
-	pass
 
 
 class EvolutionaryPolicyOptimizer():
 	"""
 	Optimize a class of policies in a certain gym environment.
+
+	Currently assumes that the action space of tghe gym environment is just of the form set(range(n)) for some n,
+	and that the output of initial_policy is precisely n.
+
+	get_env - function that returns a gym environment
+	initial_policy: instance of class Evolutionary_NN whose output dimension equals the dimension of the action space corresponding to the gym environment.
 	"""
-	def __init__(self, get_env, population_size, initial_policy, p_mutate):
-		assert 0 <= p_mutate <= 1
+	def __init__(self, get_env, population_size, initial_policy, score_memory=100):
 		self.population_size = population_size
 		self.envs = [get_env() for _ in range(population_size)]
 		self.states = [ env.reset() for env in self.envs ]
-		self.initial_policy = initial_policy
 		self.policies = [initial_policy for _ in range(population_size)]
-		self.rewards_avg = [ RunningAverage(N=100) for _ in range(population_size) ]
-		# self.rewards_min = RunningMinimum(N=100)
-		self.step_fns = [ lambda : env.step(pol.get_action(s)) for env, s, pol in zip(self.envs, self.states, self.policies) ]
+		self.rewards_avgs = [ RunningAverage(N=score_memory) for _ in range(population_size) ]
+		# self.rewards_min = RunningMinimum(N=score_memory)
 
-	def train(self, n_repeats, n_steps=1, mode='average'):
+
+	def train(self, n_steps_total, n_steps_update, mode='average', callbacks=[]):
 		"""
 		possible modes: 'average' and 'safe', the former uses a moving average and the latter a moving minumum,
-		to score various policies.
-
-		TODO:
-		- run step functions ----> yields rewards. Use these to update running averages and running minima
-		- for each policy: 
-			---PAIRING---
-			- with probability p_pair, sign policy up to be paired. Remove one if total signed up policies is odd.
-			- Devide into pairs. 
-			Combine their parameters as follows: 
-			- mode 'best': Copy the network of one of the two, with a probability based on the scores.
-			- mode 'average': Copy the network of one of the two, with a probability based on the scores. 
-			Copy its parameters on connections that are not shared
-			Average their parameters for shared connections with weights.
-
-			---Mutating---
-			with probability p_mutate, apply policy.mutate(). This is supposed to alter the skeleton of the network,
-			and hence also the shapes of the parameters
-
-			---Perturbation---
-			with probability p_perturb, add gaussian noise to the parameters, with mean 0 and a covariance matrix that is part of the parameters!
-
+		to score various policies. 
+		TODO: Implement 'safe' mode.
 		"""
+		for i in range(n_steps_total):
+			for env, pol, state in zip(self.envs, self.policies, self.states):
+				action = pol.sample_output(state)
+				s_new, r, done, _  = env.step(action)
+				r = r if not done else r-1 # This is done for compatibility with tasks of the form "stay alive as long as possible" that give the same award every step.
+				self.rewards_avgs[i].update(r)
+				self.states[i] = s_new if not done else env.reset()
 
-	def score(self, n_episodes):
-		"""
-		Either choose the policy with the highest scoring average, or emply sample from some probability distribution over the result of all policies in the population.
+			# Every ... steps, sample a new population from a distribution based on their average scores.
+			if i % n_steps_update==0:
+				scores = np.array([ avg.get() for avg in self.rewards_avgs ])
+				scores -= np.min(scores)
+				probs = scores/np.sum(scores)
+				self.policies = np.random.choice(self.policies, size=self.population_size, p=probs, replace=True)
 
-		Returns the total scores over the n episodes.
+			for pol in self.policies:
+				pol.mutate()
+				pol.perturb_params()
+
+			for callback in callbacks:
+				callback(self)
+
+
+	@staticmethod
+	def _score_single_episode(env, pol, max_steps=-1):
+		s = env.reset()
+		done = False
+		r_tot = 0
+		counter = 0
+		while not done and counter!=max_steps:
+			action = pol.sample_output(s)
+			s, r, done, _  = self.env.step(action)
+			r_tot += r
+			counter += 1
+		return r_tot
+
+
+	def score(self, n_episodes, max_steps=-1):
 		"""
-		pass
+        Returns the total scores over the n episodes.
+		"""
+		env = self.get_env()
+		avg_rewards = [ avg.get() for avg in self.rewards_avgs ]
+		best_policy = self.policies[np.argmax(avg_rewards)]
+		return [ EvolutionaryPolicyOptimizer._score_single_episode(env, pol, max_steps=max_steps) for _ in range(n_episodes) ]
