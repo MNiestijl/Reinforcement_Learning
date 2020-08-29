@@ -86,8 +86,21 @@ def bernoulli_trial(p):
 
 
 """
+Implement parallel CPU usage using the multiprocessing package.
+"""
+
+
+"""
 If the algorithms are ran in parallel, and also compete in speed somehow, faster networks (i.e., smaller ones), will automatically be preferred.
 Would be nice to implement this idea somehow, at some point.
+"""
+
+
+"""
+TODO: 
+Make tree-like structure for the policies below, such that a policy can easily be "engineered" out of layers, sections, memories etc.
+in a keras-like manner, that supports having multiple sources of inputs. Should be able to add policies or layers 'at the end' of some existing policy.
+(In the tree-structure, the top-node corresponds to the output, all the leaves to the inputs, nodes to layers, sections to 'subtrees'.)
 """
 
 
@@ -97,14 +110,6 @@ Make 2D convolution layer/section. Would be great if the system does not all par
 Perhaps a smaller subsystem selects N pixels to-be-taken-as-input, which are ordered based on the distance of their indices.
 In any case, the idea is to down-size the input in such a way that minimal information is lost.
 Perhaps there is some other way to do this.
-
-Idea:
-Use certain outputs of a first-section, interpreted as some {1, ..., N}-valued 'importance score', of a cnn to classify regions into importance-subclasses.
-The subclass i is then ordered based on spatial distance. Perform crude pooling in the not-so-important parts, but no pooling in the important parts;
-for instance, let the subclass i be subject to a reduction of, say 2^i or i^2.
-The algorithm is supposed to learn to properly reorder the outputs of this first section so that minimal information is lost in the pooling layers.
-The total output shape should be fixed for a given policy, but can perhaps change throughout the evolution process, where some incentive should be there 
-to obtain larger downsampling.
 """
 
 """
@@ -216,19 +221,7 @@ class Layer():
 
 	def evaluate(self, x):
 		"""
-		TODO: Make this efficient.
-
-		Ideas:
-		This can maybe be done more efficiently by concatenating the input slices and using "reduceat" appropriately.
-		Also using binary masks, resulting in a (d_in × d_out)-sized **sparse** array could be useful.
-		One idea: If (nearly) all outputs of a layer are connected to (nearly) all inputs, use instead the "mask-strategy" and compute the linear transformation using an ordinary matrix multiplication.
-		This should be much faster because of the better use of numpy. 
-
-		Maybe benchmark some of these methods on different scales of dimensionality.
-
-
-		Return zero if there are no connections
-
+		todo: See if there is some more efficient method to do this
 		"""
 		if not self.connections: # if list is empty, means there are no outputs!!
 			return np.zeros(0)
@@ -388,8 +381,8 @@ class NetworkSection1(NetworkSection):
 		super()._perform_init_checks()
 		
 		# Input and output of subsequent layers
-		for i, _ in range(self.n_layers-1):
-			assert layers[i].d_out==layers[i+1].d_in, "The dimensions of the input and output of subsequent layers should match"
+		for i in range(self.n_layers-1):
+			assert self.layers[i].d_out==self.layers[i+1].d_in, "The dimensions of the input and output of subsequent layers should match"
 
 
 	def _n_inputs_of_layer_at_position(self, pos):
@@ -485,8 +478,7 @@ class Evolutionary_NN():
 		self.final_layer = get_new_layer(self.section_2.d_out, d_out, -1, final_layer_config)
 		assert 0<self.p_new_node<1
 		assert 0<self.p_remove_node<1
-		# self.section_1.set_probs(p_new_layer, p_new_node, p_remove_node, p_grow_outer, p_shrink_outer, p_grow_inner, p_shrink_inner)
-		# self.section_2.set_probs(p_new_layer, p_new_node, p_remove_node, p_grow_outer, p_shrink_outer, p_grow_inner, p_shrink_inner)
+		
 		self.avg_rew = RunningAverage(N=self.score_memory)
 
 	def get_total_connections(self):
@@ -499,13 +491,15 @@ class Evolutionary_NN():
 		x = self.section_1.evaluate(x)
 		x = self.section_2.evaluate(x)
 		x = self.final_layer.evaluate(x)
-		return u.softmax(x)
+		return x # temporary
+		# return u.softmax(x)
 
 	def sample_output(self, x):
 		"""
 		Samples from the distribution resulting from self.evaluate. Returns an integer in between (0, self.d_out)
 		"""
-		return np.random.choice(range(self.d_out), p=self.evaluate(x))
+		return self.evaluate(x)
+		# return np.random.choice(range(self.d_out), p=self.evaluate(x))
 
 	def mutate(self):
 		self.section_1.mutate()
