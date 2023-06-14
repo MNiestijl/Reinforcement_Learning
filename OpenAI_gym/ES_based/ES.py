@@ -8,6 +8,7 @@ class ES():
 	"""
 	Paper: https://arxiv.org/abs/1703.03864
 	TODO: 
+	- Clean code
 	- Implement parallelization
 	- Implement a second order solver, i.e., estimate the hessian matrix stochastically and implement the saddle-free newtons method 
 	to hopefully boost performance.
@@ -31,7 +32,7 @@ class ES():
 		"""
 
 		if train:
-			self.policy.params = self.params + self.sigma*eps
+			self.policy.params = self.params + self.sigma*eps # eps IS UNDEFINED!!!
 
 		# Compute returns
 		total_reward = 0
