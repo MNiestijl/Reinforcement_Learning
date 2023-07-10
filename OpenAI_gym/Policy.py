@@ -1,44 +1,53 @@
 import numpy as np
 import numpy.random as rnd
 from copy import copy
+import utils as u
 
 class Policy():
 	"""
 	Policy interface.
-	The policy may be either stochastic or deterministic. In the former case, implement the get_distribution method.
-	In the latter case, implement the get_action method. At least one of these two must always be implemented.
+	The policy may be either stochastic or deterministic. In the former case, implement the get_distributions method.
+	In the latter case, implement the get_actions method. At least one of these two must always be implemented.
 	"""
-	def __init__(self, action_space_size):
+	def __init__(self, state_dim, action_space_size):
+		self.state_dim = state_dim
 		self.action_space_size = action_space_size
 		self.action_space = range(action_space_size)
 
-	# def update(self, sold, a, snew, reward, done):
-	# 	raise NotImplementedError("Online updating is not supported")
+	def get_distributions(self, states):
+		raise NotImplementedError("The method 'get_distributions' is not implemented.")
 
-	# def update_by_target(self, s, a, target):
-	# 	raise NotImplementedError("Updating by target is not supported")
+	def get_stochastic_actions(self, states):
+		"""
+		and sample the probability distribution.
+		The result is of shape (n_samples,).
 
-	def get_distribution(self, s):
-		raise NotImplementedError("The method 'get_distribution' is not implemented.")
+		Throws error if get_distribution is not implemented
+		"""
+		return u.sample_indices_from_2D_array(self.get_distributions(states), axis=1)
 
-	def get_stochastic_action(self, s):
-		# Throws error if get_distribution is not implemented
-		return rnd.choice(self.action_space, p=self.get_distribution(s))
-
-	def get_action(self, s):
+	def get_actions(self, states):
+		"""
+		A function of the form: state_dim -> np.array of shape (n_samples,)
+		"""
 		try:
-			return self.get_stochastic_action(s)
+			return self.get_stochastic_actions(states)
 		except NotImplementedError:
-			raise("At least one of the methods 'get_action' or 'get_distribution' must be implemented")
+			raise("At least one of the methods 'get_actions' or 'get_distributions' must be implemented")
 
-	# This method can be overridden.
-	# Experience is of the form (sold, a, snew, reward, done)
-	def train_on_batch(self, experiences):
+	def get_single_action(self, state):
+		return self.get_actions(np.reshape(state, (1, self.state_dim)))[0]
+
+	# 
+	def train(self, experiences):
+		"""
+		This method should be overridden in subclasses.
+		
+		Experience is a tuple of the form (sold, action, snew, reward, done)
+		Experiences is a list [ experience ]
+		"""
 		pass
 
-		
-		# for experience in experiences:
-		# 	self.update(*experience)
 
 
 class RandomPolicy(Policy):
@@ -46,33 +55,38 @@ class RandomPolicy(Policy):
 	def __init__(self, action_space_size):
 		super().__init__(action_space_size)
 
-	def get_action(self, state):
+	def get_action(self, states):
 		return rnd.choice(self.action_space)
 
-	# def update(self, sold, a, snew, reward, done):
-	# 	pass
 
 class NeuralPolicy(Policy):
 	"""
-	model: A neural network that maps State -> Distribution over Actions
-	get_target: Function :: self, sold, a, snew, reward, done -> array 
+	model: A neural network that maps :: np.array(state_dim,) -> Distribution over Actions
+	get_targets: Function :: experiences -> array,
+	where expereriences :: [ experience],
+	with experience :: (sold, a, snew, rew, done) 
 	""" 
 
-	def __init__(self, action_space_size, model, get_target):
-		self.action_space_size=action_space_size
+	def __init__(self, state_dim, action_space_size, model, get_targets):
 		self.model=model
-		self.get_target = get_target
-		super().__init__(action_space_size)
+		self.get_targets = get_targets
+		super().__init__(state_dim, action_space_size)
 
-	def get_distribution(self, state):
-		state = np.array(state).reshape(1,len(state))
-		return self.model.predict(state).flatten()
+	def get_distributions(self, states):
+		"""
+		states should be an array of shape: n_samples × state_dim
+		"""
+		return self.model.predict(states)
 
-	def train_on_batch(self, experiences):
+
+	def train(self, experiences):
+		"""
+		experience is a tuple (sold, a, snew, reward, done)
+
+		"""
 		states, actions, _, _, _ = zip(*experiences)
 		n_samples = len(experiences)
-		state_dim = len(states[0])
-		targets = np.array(list(map(lambda x: self.get_target(*x), experiences)))
+		targets = self.get_targets(experiences)
 		X = np.stack(states)
 		Y = np.zeros((n_samples, self.action_space_size))
 		Y[:, actions] = targets

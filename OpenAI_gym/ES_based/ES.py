@@ -2,7 +2,9 @@ import numpy as np
 import numpy.random as rnd
 from copy import copy
 
-# NOTICE: "Policy" currently does not guarantee support vectorized parameters, as is required for this code to work!
+"""
+OUTDATED!! "Policy" currently does not guarantee support vectorized parameters, as is required for this code to work!
+"""
 
 class ES():
 	"""

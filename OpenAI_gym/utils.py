@@ -4,6 +4,52 @@ import time
 from collections import deque
 import pdb
 
+
+
+
+def sample_indices_from_2D_array(p, axis=1):
+	"""
+	sample indices from the probability distributions of a 2D np array consisting of probability distributions
+	along a specified axis.
+	"""
+	c = p.cumsum(axis=axis) # Cummulative distributions
+	u = np.random.rand(len(c), 1) # Uniformly distributed samples
+	return (u < c).argmax(axis=axis) # select the index of the first value of True in (u < c) along the specified axis.
+
+def sample_from_2D_array(p, axis=1):
+	"""
+	sample from the probability distributions of a 2D np.array consisting of probability distributions
+	along a specified axis.
+	"""
+	n = p.shape[1-axis] # dimension of p along the other axis.
+	choices = sample_indices_from_2D_array(p, axis=axis)
+	return np.array([ p[i,choices[i]] for i in range(n) ])
+
+
+
+
+
+class RunningAverage():
+	def __init__(self, width):
+		self.width = width
+		self.avg = 0
+		self.numbers = deque(maxlen=width)
+
+	def add(self,x):
+		n = len(self.numbers)
+		if n == self.width:
+			self.avg += (1/self.width) * (x - self.numbers[0])
+			self.numbers.append(x)
+		else:
+			self.avg = (x + n * self.avg)/(n+1)
+			self.numbers.append(x)
+
+	def __call__(self):
+		return self.avg
+
+
+
+
 def softmax(xs):
 	xs = list(map(lambda x: m.exp(x-max(xs)), xs))
 	total = sum(xs)
